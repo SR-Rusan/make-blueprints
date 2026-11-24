@@ -1,0 +1,34 @@
+{
+  "name": "Accounting Document Collection - Scenario 9: Rejection Feedback Loop",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Rejection Trigger Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "client_id = '{{1.client_id}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Get Client Profile" } }
+    },
+    {
+      "id": 3,
+      "module": "gmail:sendAnEmail",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "to": ["{{2.primary_email}}"],
+        "subject": "Quick clarification needed regarding your uploaded document – {{2.client_name}}",
+        "content": "<p>Hello {{2.contact_name}},</p><p>We received your file <em>{{1.file_name}}</em>, but our verification noted an issue: <strong>{{1.rejection_reason}}</strong>.</p><p>Please upload the corrected document here: <a href=\"https://portal.firmcpa.com/upload?token={{2.custom_upload_token}}\">Upload Correct File</a>.</p><p>Thank you,<br><strong>Firm Bookkeeping Team</strong></p>"
+      },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Send Clarification Email" } }
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

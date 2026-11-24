@@ -1,0 +1,385 @@
+{
+  "system_name": "Client Document Collection & Missing Document Follow-Up System",
+  "version": "1.0.0-PROD",
+  "description": "Comprehensive, production-oriented Make.com automation architecture for accounting and bookkeeping firms.",
+  "recommended_stack": {
+    "automation_engine": "Make.com (Pro / Team Tier)",
+    "database": "Airtable",
+    "file_storage": "Google Drive (Workspace Enterprise)",
+    "communication": "Gmail API / Google Workspace",
+    "intake_portal": "Fillout / Tally Forms (Airtable-backed)",
+    "ai_engine": "OpenAI GPT-4o-mini (Structured Outputs)"
+  },
+  "data_model": {
+    "tables": [
+      "CLIENTS",
+      "STAFF_USERS",
+      "DOCUMENT_TEMPLATES",
+      "CLIENT_DOCUMENT_REQUIREMENTS",
+      "COLLECTION_CYCLES",
+      "COLLECTION_CYCLE_REQUIREMENTS",
+      "UPLOADED_DOCUMENTS",
+      "REMINDER_LOG",
+      "ESCALATION_LOG",
+      "COMMUNICATION_LOG",
+      "ERROR_LOG",
+      "AUDIT_LOG"
+    ]
+  },
+  "scenarios": [
+    {
+      "scenario_id": "SCEN-01-ONBOARD",
+      "scenario_name": "Client Onboarding & Requirement Profile Provisioning",
+      "purpose": "Provisions storage folders, assigns document requirement templates, generates unique client portal tokens, and activates new client records.",
+      "trigger": {
+        "type": "webhook",
+        "source": "Airtable Webhook (CLIENTS: client_status = 'Onboarding')"
+      },
+      "schedule": {
+        "type": "on_demand"
+      },
+      "modules": [
+        {
+          "module_id": "M1",
+          "order": 1,
+          "platform": "Make.com",
+          "app": "gateway",
+          "module_name": "Custom Webhook",
+          "action": "Receive Webhook",
+          "purpose": "Ingest client onboarding event payload",
+          "input_schema": { "client_id": "string" },
+          "output_schema": { "client_id": "string" },
+          "failure_behavior": "Stop"
+        },
+        {
+          "module_id": "M2",
+          "order": 2,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Get a Record",
+          "action": "getRecord",
+          "purpose": "Fetch client profile and template reference",
+          "input_mapping": { "recordId": "{{M1.client_id}}" },
+          "output_schema": { "client_name": "string", "default_template_id": "string", "primary_email": "string" },
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M6",
+          "order": 3,
+          "platform": "Make.com",
+          "app": "google-drive",
+          "module_name": "Google Drive - Create a Folder",
+          "action": "createFolder",
+          "purpose": "Create isolated document storage directory for client",
+          "input_mapping": { "name": "Clients / {{M2.client_name}} - {{M2.client_id}}" },
+          "output_schema": { "folder_id": "string" },
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M11",
+          "order": 4,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Create Record in CLIENT_DOCUMENT_REQUIREMENTS",
+          "action": "createRecord",
+          "purpose": "Instantiate client specific requirement items from template",
+          "input_mapping": {
+            "client_id": ["{{M2.id}}"],
+            "document_name": "{{iterator.document_name}}",
+            "document_type_code": "{{iterator.document_type_code}}",
+            "is_active": true
+          },
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M13",
+          "order": 5,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Update Client Record",
+          "action": "updateRecord",
+          "purpose": "Mark client active and store folder ID and portal token",
+          "input_mapping": {
+            "recordId": "{{M2.id}}",
+            "storage_folder_id": "{{M6.folder_id}}",
+            "client_status": "Active"
+          },
+          "failure_behavior": "Break"
+        }
+      ],
+      "idempotency_rules": [
+        "Check if storage_folder_id is already populated before folder creation"
+      ],
+      "retry_policy": {
+        "max_attempts": 3,
+        "interval_minutes": 5
+      }
+    },
+    {
+      "scenario_id": "SCEN-02-CYCLE-GEN",
+      "scenario_name": "Recurring Collection Cycle Generator",
+      "purpose": "Calculates previous reporting periods, builds monthly document collection cycles, clones active requirements, and triggers request dispatch.",
+      "trigger": {
+        "type": "cron",
+        "expression": "0 1 1 * *"
+      },
+      "schedule": {
+        "type": "scheduled",
+        "description": "Runs on 1st day of every month at 01:00 UTC"
+      },
+      "modules": [
+        {
+          "module_id": "M1",
+          "order": 1,
+          "platform": "Make.com",
+          "app": "scheduler",
+          "module_name": "Cron Scheduler",
+          "action": "scheduleTrigger",
+          "purpose": "Trigger monthly sweep",
+          "failure_behavior": "Stop"
+        },
+        {
+          "module_id": "M3",
+          "order": 2,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Search Active Clients",
+          "action": "searchRecords",
+          "purpose": "Find all clients due for cycle creation",
+          "input_mapping": { "filterByFormula": "AND({client_status} = 'Active', {reporting_frequency} = 'Monthly')" },
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M10",
+          "order": 3,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Create Record in COLLECTION_CYCLES",
+          "action": "createRecord",
+          "purpose": "Instantiate cycle record with calculated due dates",
+          "input_mapping": {
+            "cycle_id": "CYC-{{iterator.client_id}}-{{formatDate(now; 'YYYYMM')}}",
+            "cycle_status": "Active",
+            "idempotency_key": "{{iterator.client_id}}_{{period_start}}_{{period_end}}"
+          },
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M13",
+          "order": 4,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Create Record in COLLECTION_CYCLE_REQUIREMENTS",
+          "action": "createRecord",
+          "purpose": "Clone client active requirements into cycle requirement checklist",
+          "input_mapping": {
+            "cycle_id": ["{{M10.id}}"],
+            "requirement_status": "Requested"
+          },
+          "failure_behavior": "Break"
+        }
+      ],
+      "idempotency_rules": [
+        "Enforce unique compound key: client_id + period_start + period_end"
+      ],
+      "retry_policy": {
+        "max_attempts": 3,
+        "interval_minutes": 10
+      }
+    },
+    {
+      "scenario_id": "SCEN-04-INTAKE",
+      "scenario_name": "Document Intake, Duplicate Hashing & Storage Filing",
+      "purpose": "Receives uploaded files, validates size/mime, computes SHA-256 hash for deduplication, stores file in Google Drive, and routes to AI validation.",
+      "trigger": {
+        "type": "webhook",
+        "source": "Portal Upload Webhook"
+      },
+      "schedule": {
+        "type": "on_demand"
+      },
+      "modules": [
+        {
+          "module_id": "M1",
+          "order": 1,
+          "platform": "Make.com",
+          "app": "gateway",
+          "module_name": "Custom Webhook",
+          "action": "Receive Webhook",
+          "purpose": "Receive file upload event payload",
+          "failure_behavior": "Stop"
+        },
+        {
+          "module_id": "M4",
+          "order": 2,
+          "platform": "Make.com",
+          "app": "http",
+          "module_name": "HTTP - Get a File",
+          "action": "getFile",
+          "purpose": "Download uploaded binary file from portal temporary storage",
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M5",
+          "order": 3,
+          "platform": "Make.com",
+          "app": "tools",
+          "module_name": "Tools - Compute SHA-256 Hash",
+          "action": "setVariable",
+          "purpose": "Generate cryptographic hash for exact duplicate detection",
+          "failure_behavior": "Stop"
+        },
+        {
+          "module_id": "M14",
+          "order": 4,
+          "platform": "Make.com",
+          "app": "google-drive",
+          "module_name": "Google Drive - Upload a File",
+          "action": "uploadFile",
+          "purpose": "Persist file to client's private Google Drive repository",
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M15",
+          "order": 5,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Create Record in UPLOADED_DOCUMENTS",
+          "action": "createRecord",
+          "purpose": "Log document intake record in database",
+          "failure_behavior": "Break"
+        }
+      ],
+      "idempotency_rules": [
+        "Exact SHA-256 hash match against client history flags duplicate"
+      ],
+      "retry_policy": {
+        "max_attempts": 3,
+        "interval_minutes": 5
+      }
+    },
+    {
+      "scenario_id": "SCEN-05-AI-VALIDATE",
+      "scenario_name": "AI-Assisted Classification & Deterministic Validation Pipeline",
+      "purpose": "Extracts document metadata using OpenAI GPT-4o-mini structured schema and applies deterministic validation rules for entity, period, and document type matching.",
+      "trigger": {
+        "type": "webhook",
+        "source": "Internal Webhook from Scenario 4"
+      },
+      "schedule": {
+        "type": "on_demand"
+      },
+      "modules": [
+        {
+          "module_id": "M7",
+          "order": 1,
+          "platform": "Make.com",
+          "app": "openai",
+          "module_name": "OpenAI - Create Structured Chat Completion",
+          "action": "createStructuredCompletion",
+          "purpose": "Analyze document layout, dates, and entity references",
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M9",
+          "order": 2,
+          "platform": "Make.com",
+          "app": "router",
+          "module_name": "Router - Validation Decision Engine",
+          "action": "routeBranches",
+          "purpose": "Route to Accept, Reject, Wrong Period, or Manual Review branches",
+          "failure_behavior": "Stop"
+        },
+        {
+          "module_id": "M17",
+          "order": 3,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Update COLLECTION_CYCLE_REQUIREMENTS",
+          "action": "updateRecord",
+          "purpose": "Mark requirement Accepted upon verified match",
+          "failure_behavior": "Break"
+        }
+      ],
+      "retry_policy": {
+        "max_attempts": 3,
+        "interval_minutes": 5
+      }
+    },
+    {
+      "scenario_id": "SCEN-07-REMINDERS",
+      "scenario_name": "Precision Scheduled Reminder & Escalation Dispatcher",
+      "purpose": "Evaluates incomplete collection cycles, filters out satisfied items, computes overdue intervals, and dispatches personalized reminders or manager escalations.",
+      "trigger": {
+        "type": "cron",
+        "expression": "0 8 * * *"
+      },
+      "schedule": {
+        "type": "scheduled",
+        "description": "Runs daily at 08:00 UTC"
+      },
+      "modules": [
+        {
+          "module_id": "M2",
+          "order": 1,
+          "platform": "Make.com",
+          "app": "airtable",
+          "module_name": "Airtable - Search Incomplete Cycles",
+          "action": "searchRecords",
+          "purpose": "Query cycles where total_missing_documents > 0",
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M10",
+          "order": 2,
+          "platform": "Make.com",
+          "app": "gmail",
+          "module_name": "Gmail - Send Personalized Reminder Email",
+          "action": "sendEmail",
+          "purpose": "Dispatch reminder containing only currently missing items",
+          "failure_behavior": "Break"
+        },
+        {
+          "module_id": "M14",
+          "order": 3,
+          "platform": "Make.com",
+          "app": "slack",
+          "module_name": "Slack - Post Escalation Message",
+          "action": "postMessage",
+          "purpose": "Alert accounting managers when reminder limit is breached",
+          "failure_behavior": "Resume"
+        }
+      ],
+      "retry_policy": {
+        "max_attempts": 3,
+        "interval_minutes": 15
+      }
+    }
+  ],
+  "validation_rules": [
+    {
+      "rule_id": "VAL-01",
+      "rule_name": "Corrupted / Unreadable File Check",
+      "condition": "file_size == 0 OR ai_response.is_readable == false",
+      "action": "Set status = 'Unreadable', trigger Rejection Loop"
+    },
+    {
+      "rule_id": "VAL-02",
+      "rule_name": "Cross-Entity Protection Check",
+      "condition": "ai_response.probable_client_name does not match client record",
+      "action": "Set status = 'Under Review', alert staff in Slack"
+    },
+    {
+      "rule_id": "VAL-03",
+      "rule_name": "Reporting Period Date Boundary Check",
+      "condition": "detected_period_start < cycle.period_start OR detected_period_end > cycle.period_end",
+      "action": "Set status = 'Wrong Period', send clarification email"
+    },
+    {
+      "rule_id": "VAL-04",
+      "rule_name": "Confidence Threshold Check",
+      "condition": "ai_response.confidence_score >= 0.85 AND matches_expected_requirement == true",
+      "action": "Set status = 'Accepted', satisfy cycle requirement"
+    }
+  ]
+}

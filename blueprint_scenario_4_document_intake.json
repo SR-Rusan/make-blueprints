@@ -1,0 +1,69 @@
+{
+  "name": "Accounting Document Collection - Scenario 4: Document Intake & Storage",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Portal Upload Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "custom_upload_token = '{{1.upload_token}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Validate Client Token" } }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionGetFile",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "url": "{{1.file_url}}" },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Download Uploaded File" } }
+    },
+    {
+      "id": 4,
+      "module": "google-drive:uploadAFile",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "folderId": "{{2.storage_folder_id}}",
+        "name": "{{2.client_id}}_{{1.claimed_doc_type}}_{{1.original_filename}}",
+        "data": "{{3.data}}"
+      },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Save to Google Drive" } }
+    },
+    {
+      "id": 5,
+      "module": "google-sheets:addRow",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "upload_id": "UPL-{{now}}",
+        "client_id": "{{2.client_id}}",
+        "cycle_id": "{{1.cycle_id}}",
+        "file_name": "{{1.original_filename}}",
+        "drive_link": "{{4.webViewLink}}",
+        "validation_status": "Uploaded"
+      },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Log Upload in Google Sheets" } }
+    },
+    {
+      "id": 6,
+      "module": "http:ActionMakeRequest",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "url": "https://hook.eu2.make.com/scenario-5-ai-validate",
+        "method": "POST",
+        "body": "{\"upload_id\": \"{{5.upload_id}}\", \"drive_file_id\": \"{{4.id}}\", \"cycle_id\": \"{{1.cycle_id}}\"}"
+      },
+      "metadata": { "designer": { "x": 1400, "y": 0, "name": "Trigger AI Validation Scenario" } }
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

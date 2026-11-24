@@ -1,0 +1,70 @@
+{
+  "name": "Accounting Document Collection - Scenario 3: Initial Request Dispatcher",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Trigger Initial Request Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "cycle_id = '{{1.cycle_id}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Get Cycle Details" } }
+    },
+    {
+      "id": 3,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "client_id = '{{1.client_id}}'" },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Get Client Contact Info" } }
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "cycle_id = '{{1.cycle_id}}'" },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Get Cycle Requirements" } }
+    },
+    {
+      "id": 5,
+      "module": "builtin:BasicAggregator",
+      "version": 1,
+      "parameters": { "feeder": 4 },
+      "mapper": { "text": "• <strong>{{4.document_name}}</strong>: {{4.description_instructions}} (Accepted formats: {{4.accepted_file_extensions}})" },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Aggregate Checklist Text" } }
+    },
+    {
+      "id": 6,
+      "module": "gmail:sendAnEmail",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "to": ["{{3.primary_email}}"],
+        "subject": "Documents Needed: {{2.cycle_name}} – {{3.client_name}}",
+        "content": "<p>Hello {{3.contact_name}},</p><p>We are preparing your bookkeeping for <strong>{{2.cycle_name}}</strong>.</p><p>Please upload the following required items by <strong>{{2.due_date}}</strong>:</p><div>{{5.text}}</div><p><a href=\"https://portal.firmcpa.com/upload?token={{3.custom_upload_token}}&cycle={{2.cycle_id}}\">Upload Documents Securely Here</a></p><p>Thank you,<br><strong>Firm Bookkeeping Team</strong></p>"
+      },
+      "metadata": { "designer": { "x": 1400, "y": 0, "name": "Send Initial Request Email" } }
+    },
+    {
+      "id": 7,
+      "module": "google-sheets:updateRow",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "rowNumber": "{{2.rowNumber}}",
+        "first_request_sent_at": "{{now}}",
+        "latest_reminder_sent_at": "{{now}}"
+      },
+      "metadata": { "designer": { "x": 1680, "y": 0, "name": "Update Cycle Timestamps" } }
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

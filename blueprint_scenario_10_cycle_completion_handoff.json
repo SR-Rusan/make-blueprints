@@ -1,0 +1,65 @@
+{
+  "name": "Accounting Document Collection - Scenario 10: Cycle Completion & Handoff",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Completion Trigger Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "cycle_id = '{{1.cycle_id}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Get Cycle Record" } }
+    },
+    {
+      "id": 3,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "client_id = '{{2.client_id}}'" },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Get Client Profile" } }
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:updateRow",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "rowNumber": "{{2.rowNumber}}",
+        "cycle_status": "Completed",
+        "completed_at": "{{now}}"
+      },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Mark Cycle Completed" } }
+    },
+    {
+      "id": 5,
+      "module": "slack:createMessage",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "channel": "#accounting-ready-for-prep",
+        "text": "🎉 *100% Document Collection Complete!*\n• *Client:* {{3.client_name}}\n• *Period:* {{2.cycle_name}}\n• *Drive Folder:* <{{3.storage_folder_id}}|Open Client Folder>\n_Ready for bookkeeping preparation._"
+      },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Notify Accounting Staff in Slack" } }
+    },
+    {
+      "id": 6,
+      "module": "gmail:sendAnEmail",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "to": ["{{3.primary_email}}"],
+        "subject": "All documents received for {{2.cycle_name}} – Thank you!",
+        "content": "<p>Hello {{3.contact_name}},</p><p>Great news! We have received all required documents for your <strong>{{2.cycle_name}}</strong> cycle.</p><p>Our team is now preparing your monthly financial statements.</p><p>Thank you,<br><strong>Firm Bookkeeping Team</strong></p>"
+      },
+      "metadata": { "designer": { "x": 1400, "y": 0, "name": "Send Thank You to Client" } }
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

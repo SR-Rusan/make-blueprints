@@ -1,0 +1,220 @@
+{
+  "name": "Accounting Document Collection - Scenario 1: Client Onboarding",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": null,
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0,
+          "name": "Client Onboarding Webhook"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "airtable:getRecord",
+      "version": 1,
+      "parameters": {
+        "base": null,
+        "table": null
+      },
+      "mapper": {
+        "recordId": "{{1.client_id}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 280,
+          "y": 0,
+          "name": "Get Client Record"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "metadata": {
+        "designer": {
+          "x": 560,
+          "y": 0,
+          "name": "Validation Router"
+        }
+      },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 4,
+              "module": "google-drive:createFolder",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "name": "Clients / {{2.client_name}} - {{2.client_id}}"
+              },
+              "filter": {
+                "name": "Valid Profile",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.primary_email}}",
+                      "o": "exists"
+                    }
+                  ]
+                ]
+              },
+              "metadata": {
+                "designer": {
+                  "x": 840,
+                  "y": -120,
+                  "name": "Create Client Root Folder"
+                }
+              }
+            },
+            {
+              "id": 5,
+              "module": "google-drive:createFolder",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "parentFolderId": "{{4.id}}",
+                "name": "Archive / Raw Uploads"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 1120,
+                  "y": -120,
+                  "name": "Create Raw Uploads Subfolder"
+                }
+              }
+            },
+            {
+              "id": 6,
+              "module": "airtable:searchRecords",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "formula": "{template_id} = '{{2.default_template_id}}'"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 1400,
+                  "y": -120,
+                  "name": "Search Template Requirements"
+                }
+              }
+            },
+            {
+              "id": 7,
+              "module": "builtin:BasicFeeder",
+              "version": 1,
+              "parameters": {
+                "array": "{{6.records}}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 1680,
+                  "y": -120,
+                  "name": "Iterator (Template Requirements)"
+                }
+              }
+            },
+            {
+              "id": 8,
+              "module": "airtable:createRecord",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "client_id": ["{{2.id}}"],
+                "document_name": "{{7.document_name}}",
+                "document_type_code": "{{7.document_type_code}}",
+                "description_instructions": "{{7.description_instructions}}",
+                "required_or_optional": "{{7.required_or_optional}}",
+                "is_active": true
+              },
+              "metadata": {
+                "designer": {
+                  "x": 1960,
+                  "y": -120,
+                  "name": "Create Client Requirement"
+                }
+              }
+            },
+            {
+              "id": 9,
+              "module": "airtable:updateRecord",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "recordId": "{{2.id}}",
+                "storage_folder_id": "{{4.id}}",
+                "client_status": "Active"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 2240,
+                  "y": -120,
+                  "name": "Activate Client Record"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 10,
+              "module": "gmail:sendAnEmail",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "to": ["admin@firmcpa.com"],
+                "subject": "Onboarding Incomplete for Client {{2.client_name}}",
+                "content": "<p>Client {{2.client_name}} is missing a primary email address. Please update their profile.</p>"
+              },
+              "filter": {
+                "name": "Incomplete Profile",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.primary_email}}",
+                      "o": "notExists"
+                    }
+                  ]
+                ]
+              },
+              "metadata": {
+                "designer": {
+                  "x": 840,
+                  "y": 140,
+                  "name": "Alert Admin via Email"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false
+    }
+  }
+}

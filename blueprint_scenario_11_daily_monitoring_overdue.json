@@ -1,0 +1,58 @@
+{
+  "name": "Accounting Document Collection - Scenario 11: Overdue Cycle Monitor",
+  "flow": [
+    {
+      "id": 1,
+      "module": "builtin:BasicScheduler",
+      "version": 1,
+      "parameters": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Daily 17:00 Sweep Scheduler" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "AND(cycle_status = 'Active', total_missing_documents > 0)" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Search Incomplete Active Cycles" } }
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": { "array": "{{2.records}}" },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Iterator (Cycles)" } }
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:updateRow",
+      "version": 1,
+      "parameters": {},
+      "filter": {
+        "name": "Past Due Date",
+        "conditions": [
+          [
+            { "a": "{{now}}", "o": "gt", "b": "{{3.due_date}}" }
+          ]
+        ]
+      },
+      "mapper": {
+        "rowNumber": "{{3.rowNumber}}",
+        "cycle_status": "Overdue"
+      },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Mark Overdue in Sheets" } }
+    },
+    {
+      "id": 5,
+      "module": "slack:createMessage",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "channel": "#accounting-overdue-cycles",
+        "text": "⚠️ *Cycle Now Overdue:* Client {{3.client_id}} for *{{3.cycle_name}}* ({{3.total_missing_documents}} documents still missing)."
+      },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Alert Team in Slack" } }
+    }
+  ],
+  "metadata": { "instant": false, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

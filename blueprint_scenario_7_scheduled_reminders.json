@@ -1,0 +1,144 @@
+{
+  "name": "Accounting Document Collection - Scenario 7: Scheduled Reminders",
+  "flow": [
+    {
+      "id": 1,
+      "module": "builtin:BasicScheduler",
+      "version": 1,
+      "parameters": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0,
+          "name": "Daily 08:00 Scheduler"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "airtable:searchRecords",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "formula": "AND(OR({cycle_status} = 'Active', {cycle_status} = 'Overdue'), {total_missing_documents} > 0)"
+      },
+      "metadata": {
+        "designer": {
+          "x": 280,
+          "y": 0,
+          "name": "Search Incomplete Cycles"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {
+        "array": "{{2.records}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 560,
+          "y": 0,
+          "name": "Iterator (Cycles)"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "module": "airtable:getRecord",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "recordId": "{{3.client_id[1]}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 840,
+          "y": 0,
+          "name": "Get Client Details"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "module": "airtable:searchRecords",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "formula": "AND({cycle_id} = '{{3.id}}', {is_mandatory} = TRUE(), NOT(OR({requirement_status} = 'Accepted', {requirement_status} = 'Waived')))"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1120,
+          "y": 0,
+          "name": "Get Outstanding Requirements"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "module": "builtin:BasicAggregator",
+      "version": 1,
+      "parameters": {
+        "feeder": 5
+      },
+      "mapper": {
+        "text": "• <strong>{{5.document_name}}</strong>: {{5.description_instructions}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1400,
+          "y": 0,
+          "name": "Aggregate Missing Checklist"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "module": "gmail:sendAnEmail",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "to": ["{{4.primary_email}}"],
+        "subject": "Reminder ({{length(5.records)}} items needed): {{3.cycle_name}} – {{4.client_name}}",
+        "content": "<p>Hello {{4.contact_name}},</p><p>We are still waiting on the following items for <strong>{{3.cycle_name}}</strong>:</p><div>{{6.text}}</div><p><a href=\"https://portal.firmcpa.com/upload?token={{4.custom_upload_token}}&cycle={{3.cycle_id}}\">Click here to upload missing documents</a></p><p>Thank you,<br><strong>Firm Bookkeeping Team</strong></p>"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1680,
+          "y": 0,
+          "name": "Send Precision Reminder Email"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "module": "airtable:updateRecord",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "recordId": "{{3.id}}",
+        "latest_reminder_sent_at": "{{now}}",
+        "reminder_count": "{{3.reminder_count + 1}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1960,
+          "y": 0,
+          "name": "Update Cycle Reminder Timestamp"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true
+    }
+  }
+}

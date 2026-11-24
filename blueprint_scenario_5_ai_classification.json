@@ -1,0 +1,130 @@
+{
+  "name": "Accounting Document Collection - Scenario 5: AI Classification & Validation",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Validation Trigger Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "upload_id = '{{1.upload_id}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Get Upload Record" } }
+    },
+    {
+      "id": 3,
+      "module": "openai:createChatCompletion",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Analyze the financial document name and metadata. Return JSON with: predicted_document_type, confidence_score (0-1), is_readable (true/false), and matches_expected_requirement (true/false)."
+          },
+          {
+            "role": "user",
+            "content": "File: {{2.file_name}}, Claimed Type: {{2.claimed_document_type}}, Cycle: {{1.cycle_id}}"
+          }
+        ]
+      },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "OpenAI Structured Analysis" } }
+    },
+    {
+      "id": 4,
+      "module": "json:ParseJSON",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "json": "{{3.choices[1].message.content}}" },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Parse AI Output" } }
+    },
+    {
+      "id": 5,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Confidence Router" } },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 6,
+              "module": "google-sheets:updateRow",
+              "version": 1,
+              "parameters": {},
+              "filter": {
+                "name": "High Confidence Match",
+                "conditions": [
+                  [
+                    { "a": "{{4.confidence_score}}", "o": "gte", "b": 0.85 },
+                    { "a": "{{4.is_readable}}", "o": "equal", "b": true }
+                  ]
+                ]
+              },
+              "mapper": {
+                "rowNumber": "{{2.rowNumber}}",
+                "validation_status": "Accepted",
+                "ai_confidence_score": "{{4.confidence_score}}"
+              },
+              "metadata": { "designer": { "x": 1400, "y": -120, "name": "Mark Document Accepted" } }
+            },
+            {
+              "id": 7,
+              "module": "http:ActionMakeRequest",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "url": "https://hook.eu2.make.com/scenario-6-calc-delta",
+                "method": "POST",
+                "body": "{\"cycle_id\": \"{{1.cycle_id}}\"}"
+              },
+              "metadata": { "designer": { "x": 1680, "y": -120, "name": "Recalculate Cycle State" } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 8,
+              "module": "google-sheets:updateRow",
+              "version": 1,
+              "parameters": {},
+              "filter": {
+                "name": "Low Confidence or Discrepancy",
+                "conditions": [
+                  [
+                    { "a": "{{4.confidence_score}}", "o": "lt", "b": 0.85 }
+                  ]
+                ]
+              },
+              "mapper": {
+                "rowNumber": "{{2.rowNumber}}",
+                "validation_status": "Under Review",
+                "ai_confidence_score": "{{4.confidence_score}}"
+              },
+              "metadata": { "designer": { "x": 1400, "y": 120, "name": "Flag for Manual Review" } }
+            },
+            {
+              "id": 9,
+              "module": "slack:createMessage",
+              "version": 1,
+              "parameters": {},
+              "mapper": {
+                "channel": "#accounting-alerts",
+                "text": "Document requires manual review: {{2.file_name}} (Cycle: {{1.cycle_id}}, AI Confidence: {{4.confidence_score}})"
+              },
+              "metadata": { "designer": { "x": 1680, "y": 120, "name": "Alert Team in Slack" } }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

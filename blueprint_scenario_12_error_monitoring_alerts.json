@@ -1,0 +1,41 @@
+{
+  "name": "Accounting Document Collection - Scenario 12: Error Logger & Failure Alerts",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Global Error Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:addRow",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "error_id": "ERR-{{now}}",
+        "scenario_name": "{{1.scenario_name}}",
+        "client_id": "{{1.client_id}}",
+        "error_type": "{{1.error_type}}",
+        "error_message": "{{1.error_message}}",
+        "timestamp": "{{now}}",
+        "resolution_status": "Open"
+      },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Log Error to Google Sheets" } }
+    },
+    {
+      "id": 3,
+      "module": "slack:createMessage",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "channel": "#system-errors",
+        "text": "🚨 *Automation Error Alert!*\n• *Scenario:* `{{1.scenario_name}}`\n• *Type:* `{{1.error_type}}`\n• *Details:* `{{1.error_message}}`\n• *Client:* {{1.client_id}}"
+      },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Send Critical Alert to Slack" } }
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

@@ -1,0 +1,115 @@
+{
+  "name": "Accounting Document Collection - Scenario 6: Delta Calculator & State Machine",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": null, "maxResults": 1 },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Delta Calculator Webhook" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "cycle_id = '{{1.cycle_id}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Get Cycle Details" } }
+    },
+    {
+      "id": 3,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "cycle_id = '{{1.cycle_id}}'" },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "Get Cycle Requirements" } }
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "AND(cycle_id = '{{1.cycle_id}}', validation_status = 'Accepted')" },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Get Accepted Uploads" } }
+    },
+    {
+      "id": 5,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "variables": [
+          { "name": "total_req", "value": "{{length(3.records)}}" },
+          { "name": "total_accepted", "value": "{{length(4.records)}}" },
+          { "name": "total_missing", "value": "{{length(3.records) - length(4.records)}}" }
+        ]
+      },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Compute Missing Delta" } }
+    },
+    {
+      "id": 6,
+      "module": "google-sheets:updateRow",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "rowNumber": "{{2.rowNumber}}",
+        "total_missing_documents": "{{5.total_missing}}",
+        "total_accepted_documents": "{{5.total_accepted}}"
+      },
+      "metadata": { "designer": { "x": 1400, "y": 0, "name": "Update Cycle Counters" } }
+    },
+    {
+      "id": 7,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "metadata": { "designer": { "x": 1680, "y": 0, "name": "Completion Check Router" } },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 8,
+              "module": "http:ActionMakeRequest",
+              "version": 1,
+              "parameters": {},
+              "filter": {
+                "name": "100% Completed",
+                "conditions": [
+                  [
+                    { "a": "{{5.total_missing}}", "o": "lte", "b": 0 }
+                  ]
+                ]
+              },
+              "mapper": {
+                "url": "https://hook.eu2.make.com/scenario-10-complete",
+                "method": "POST",
+                "body": "{\"cycle_id\": \"{{1.cycle_id}}\"}"
+              },
+              "metadata": { "designer": { "x": 1960, "y": -120, "name": "Trigger Completion Scenario" } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 9,
+              "module": "util:Ignore",
+              "version": 1,
+              "parameters": {},
+              "filter": {
+                "name": "Items Still Missing",
+                "conditions": [
+                  [
+                    { "a": "{{5.total_missing}}", "o": "gt", "b": 0 }
+                  ]
+                ]
+              },
+              "metadata": { "designer": { "x": 1960, "y": 120, "name": "Continue Active Cycle" } }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": { "instant": true, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}

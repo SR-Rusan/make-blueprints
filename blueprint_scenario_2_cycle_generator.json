@@ -1,0 +1,192 @@
+{
+  "name": "Accounting Document Collection - Scenario 2: Cycle Generator",
+  "flow": [
+    {
+      "id": 1,
+      "module": "builtin:BasicScheduler",
+      "version": 1,
+      "parameters": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0,
+          "name": "1st of Month Scheduler"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "util:SetVariables",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "variables": [
+          {
+            "name": "period_start",
+            "value": "{{formatDate(addMonths(now; -1); \"YYYY-MM-01\")}}"
+          },
+          {
+            "name": "period_end",
+            "value": "{{formatDate(addDays(formatDate(now; \"YYYY-MM-01\"); -1); \"YYYY-MM-DD\")}}"
+          },
+          {
+            "name": "cycle_month_name",
+            "value": "{{formatDate(addMonths(now; -1); \"MMMM YYYY\")}}"
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 280,
+          "y": 0,
+          "name": "Calculate Dates"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "airtable:searchRecords",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "formula": "AND({client_status} = 'Active', {reporting_frequency} = 'Monthly')"
+      },
+      "metadata": {
+        "designer": {
+          "x": 560,
+          "y": 0,
+          "name": "Search Active Monthly Clients"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {
+        "array": "{{3.records}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 840,
+          "y": 0,
+          "name": "Iterator (Active Clients)"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "module": "airtable:searchRecords",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "formula": "{idempotency_key} = '{{4.client_id}}_{{2.period_start}}_{{2.period_end}}'"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1120,
+          "y": 0,
+          "name": "Idempotency Check"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "module": "airtable:createRecord",
+      "version": 1,
+      "parameters": {},
+      "filter": {
+        "name": "Cycle Not Yet Created",
+        "conditions": [
+          [
+            {
+              "a": "{{5.records}}",
+              "o": "empty"
+            }
+          ]
+        ]
+      },
+      "mapper": {
+        "cycle_id": "CYC-{{4.client_id}}-{{formatDate(2.period_start; \"YYYYMM\")}}",
+        "client_id": ["{{4.id}}"],
+        "cycle_name": "{{2.cycle_month_name}} Bookkeeping Collection",
+        "reporting_frequency": "Monthly",
+        "reporting_period_start": "{{2.period_start}}",
+        "reporting_period_end": "{{2.period_end}}",
+        "cycle_open_date": "{{formatDate(now; \"YYYY-MM-DD\")}}",
+        "document_due_date": "{{formatDate(addDays(now; 7); \"YYYY-MM-DD\")}}",
+        "cycle_status": "Active",
+        "idempotency_key": "{{4.client_id}}_{{2.period_start}}_{{2.period_end}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1400,
+          "y": 0,
+          "name": "Create Collection Cycle"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "module": "airtable:searchRecords",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "formula": "AND({client_id} = '{{4.id}}', {is_active} = TRUE())"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1680,
+          "y": 0,
+          "name": "Get Client Document Requirements"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {
+        "array": "{{7.records}}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 1960,
+          "y": 0,
+          "name": "Iterator (Requirements)"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "module": "airtable:createRecord",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "cycle_req_id": "CREQ-{{6.id}}-{{8.id}}",
+        "cycle_id": ["{{6.id}}"],
+        "client_req_id": ["{{8.id}}"],
+        "document_name": "{{8.document_name}}",
+        "document_type_code": "{{8.document_type_code}}",
+        "requirement_status": "Requested",
+        "is_mandatory": true
+      },
+      "metadata": {
+        "designer": {
+          "x": 2240,
+          "y": 0,
+          "name": "Create Cycle Requirement"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true
+    }
+  }
+}

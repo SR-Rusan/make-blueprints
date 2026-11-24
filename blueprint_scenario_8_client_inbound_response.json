@@ -1,0 +1,58 @@
+{
+  "name": "Accounting Document Collection - Scenario 8: Inbound Response & Waiver Router",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gmail:watchEmails",
+      "version": 1,
+      "parameters": { "label": "INBOX", "criteria": "all" },
+      "mapper": {},
+      "metadata": { "designer": { "x": 0, "y": 0, "name": "Watch Client Inbound Emails" } }
+    },
+    {
+      "id": 2,
+      "module": "google-sheets:searchRows",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "filter": "primary_email = '{{1.from}}'" },
+      "metadata": { "designer": { "x": 280, "y": 0, "name": "Match Client by Email" } }
+    },
+    {
+      "id": 3,
+      "module": "openai:createChatCompletion",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Classify client email into: WAIVER_REQUEST, EXTENSION_REQUEST, or QUESTION. Return JSON with: intent, explanation."
+          },
+          { "role": "user", "content": "{{1.snippet}}" }
+        ]
+      },
+      "metadata": { "designer": { "x": 560, "y": 0, "name": "AI Intent Classification" } }
+    },
+    {
+      "id": 4,
+      "module": "json:ParseJSON",
+      "version": 1,
+      "parameters": {},
+      "mapper": { "json": "{{3.choices[1].message.content}}" },
+      "metadata": { "designer": { "x": 840, "y": 0, "name": "Parse Intent" } }
+    },
+    {
+      "id": 5,
+      "module": "slack:createMessage",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "channel": "#client-inquiries",
+        "text": "📬 Inbound Client Message from *{{2.client_name}}* (Intent: *{{4.intent}}*):\n\"{{1.snippet}}\""
+      },
+      "metadata": { "designer": { "x": 1120, "y": 0, "name": "Route Message to Staff in Slack" } }
+    }
+  ],
+  "metadata": { "instant": false, "version": 1, "scenario": { "roundtrips": 1, "maxErrors": 3, "autoCommit": true } }
+}
